@@ -187,3 +187,50 @@ public class ProxyApi {
 }
 
 
+import com.sparkjava.spark.Spark;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.net.HttpURLConnection;
+import java.net.URL;
+
+public class ProxyApi {
+
+    public static void main(String[] args) {
+        Spark.port(8080);
+
+        Spark.post("/api/proxy", (request, response) -> {
+            try {
+                // Parse the request body manually to get URL, headers, method, and body
+                String requestBody = request.body();
+                String url = getValueFromJson(requestBody, "url");
+                String headers = getValueFromJson(requestBody, "headers");
+                String method = getValueFromJson(requestBody, "method");
+                String body = getValueFromJson(requestBody, "body");
+
+                // Rest of the code remains the same...
+                // ... (Refer to the previous code provided for handling the API call)
+
+                // Remaining code unchanged
+                // ...
+            } catch (Exception e) {
+                response.status(500);
+                return "Error occurred: " + e.getMessage();
+            }
+        });
+    }
+
+    // Helper method to extract values from JSON string
+    private static String getValueFromJson(String json, String key) {
+        String startTag = "\"" + key + "\":\"";
+        int startIndex = json.indexOf(startTag);
+        if (startIndex != -1) {
+            int endIndex = json.indexOf("\"", startIndex + startTag.length());
+            if (endIndex != -1) {
+                return json.substring(startIndex + startTag.length(), endIndex);
+            }
+        }
+        return null;
+    }
+}
+
