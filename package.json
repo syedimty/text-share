@@ -112,3 +112,78 @@ public class ProxyApi {
     }
 }
 
+import com.sparkjava.spark.Spark;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.net.HttpURLConnection;
+import java.net.URL;
+
+public class ProxyApi {
+
+    public static void main(String[] args) {
+        Spark.port(8080);
+
+        Spark.post("/api/proxy", (request, response) -> {
+            try {
+                // Extract request data
+                String urlStr = request.queryParams("url");
+                String headers = request.queryParams("headers");
+                String method = request.queryParams("method");
+                String body = request.body();
+
+                // Create the URL object
+                URL url = new URL(urlStr);
+
+                // Open the connection
+                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                connection.setRequestMethod(method);
+
+                // Add headers to the request if available
+                if (headers != null && !headers.isEmpty()) {
+                    String[] headerArray = headers.split(",");
+                    for (String header : headerArray) {
+                        String[] headerParts = header.trim().split(":");
+                        if (headerParts.length == 2) {
+                            connection.setRequestProperty(headerParts[0].trim(), headerParts[1].trim());
+                        }
+                    }
+                }
+
+                // Handle POST requests with a request body
+                if ("POST".equalsIgnoreCase(method) && body != null) {
+                    connection.setDoOutput(true);
+                    try (OutputStreamWriter writer = new OutputStreamWriter(connection.getOutputStream())) {
+                        writer.write(body);
+                        writer.flush();
+                    }
+                }
+
+                // Get the response
+                int responseCode = connection.getResponseCode();
+
+                // Read the response
+                StringBuilder responseBuilder = new StringBuilder();
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        responseBuilder.append(line);
+                    }
+                }
+
+                // Close the connection
+                connection.disconnect();
+
+                // Return the response
+                response.status(responseCode);
+                return responseBuilder.toString();
+            } catch (Exception e) {
+                response.status(500);
+                return "Error occurred: " + e.getMessage();
+            }
+        });
+    }
+}
+
+
