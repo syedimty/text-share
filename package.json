@@ -234,3 +234,136 @@ public class ProxyApi {
     }
 }
 
+
+
+import com.sparkjava.spark.Spark;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.Map;
+
+public class ProxyApi {
+
+    public static void main(String[] args) {
+        Spark.port(8080);
+
+        Spark.post("/api/proxy", (request, response) -> {
+            try {
+                // Extract URL and method from query parameters
+                String url = request.queryParams("url");
+                String method = request.queryParams("method");
+
+                // Extract headers from the initial request
+                String headers = getRequestHeaders(request.headers());
+
+                // Extract body from the request
+                String body = request.body();
+
+                // Create the URL object
+                URL apiUrl = new URL(url);
+
+                // Open the connection
+                HttpURLConnection connection = (HttpURLConnection) apiUrl.openConnection();
+
+                // Ignore SSL certificate validation
+                if (connection instanceof HttpsURLConnection) {
+                    ((HttpsURLConnection) connection).setSSLSocketFactory(getUnsafeSSLSocketFactory());
+                    ((HttpsURLConnection) connection).setHostnameVerifier((hostname, session) -> true);
+                }
+
+                // Set the request method
+                connection.setRequestMethod(method);
+
+                // Set request headers
+                String[] headerArray = headers.split(",");
+                for (String header : headerArray) {
+                    String[] headerParts = header.trim().split(":");
+                    if (headerParts.length == 2) {
+                        connection.setRequestProperty(headerParts[0].trim(), headerParts[1].trim());
+                    }
+                }
+
+                // Handle POST requests with a request body
+                if ("POST".equalsIgnoreCase(method) && body != null) {
+                    connection.setDoOutput(true);
+                    try (OutputStreamWriter writer = new OutputStreamWriter(connection.getOutputStream())) {
+                        writer.write(body);
+                        writer.flush();
+                    }
+                }
+
+                // Get the response
+                int responseCode = connection.getResponseCode();
+
+                // Read the response
+                StringBuilder responseBuilder = new StringBuilder();
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        responseBuilder.append(line);
+                    }
+                }
+
+                // Close the connection
+                connection.disconnect();
+
+                // Set the response status and headers
+                response.status(responseCode);
+                for (Map.Entry<String, List<String>> entry : connection.getHeaderFields().entrySet()) {
+                    String headerName = entry.getKey();
+                    List<String> headerValues = entry.getValue();
+                    for (String value : headerValues) {
+                        response.header(headerName, value);
+                    }
+                }
+
+                // Return the response
+                return responseBuilder.toString();
+            } catch (Exception e) {
+                response.status(500);
+                return "Error occurred: " + e.getMessage();
+            }
+        });
+    }
+
+    // Helper method to extract headers from the initial request
+    private static String getRequestHeaders(Map<String, String> headersMap) {
+        StringBuilder headersBuilder = new StringBuilder();
+        for (Map.Entry<String, String> entry : headersMap.entrySet()) {
+            headersBuilder.append(entry.getKey()).append(": ").append(entry.getValue()).append(",");
+        }
+        // Remove the trailing comma
+        if (headersBuilder.length() > 0) {
+            headersBuilder.setLength(headersBuilder.length() - 1);
+        }
+        return headersBuilder.toString();
+    }
+
+    // Helper method to get Unsafe SSLSocketFactory for disabling certificate validation
+    private static SSLSocketFactory getUnsafeSSLSocketFactory() {
+        try {
+            TrustManager[] trustAllCerts = new TrustManager[]{
+                    new X509TrustManager() {
+                        public void checkClientTrusted(X509Certificate[] chain, String authType) {
+                        }
+
+                        public void checkServerTrusted(X509Certificate[] chain, String authType) {
+                        }
+
+                        public X509Certificate[] getAcceptedIssuers() {
+                            return new X509Certificate[]{};
+                        }
+                    }
+            };
+
+            SSLContext sslContext = SSLContext.getInstance("TLS");
+            sslContext.init(null, trustAllCerts, new java.security.SecureRandom());
+            return sslContext.getSocketFactory();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+}
+
